@@ -1195,6 +1195,24 @@ export class EnumParser {
 
   parseEnums(data: string): Record<string, any> {
     const enums: Record<string, any> = {};
+    
+    // Parse traditional enum declarations
+    const traditionalEnums = this.parseTraditionalEnums(data);
+    Object.assign(enums, traditionalEnums);
+    
+    // Parse const array enums
+    const constArrayEnums = this.parseConstArrayEnums(data);
+    Object.assign(enums, constArrayEnums);
+    
+    // Parse union type enums
+    const unionTypeEnums = this.parseUnionTypeEnums(data);
+    Object.assign(enums, unionTypeEnums);
+    
+    return enums;
+  }
+
+  private parseTraditionalEnums(data: string): Record<string, any> {
+    const enums: Record<string, any> = {};
     const lines = data.split("\n");
     let currentEnum: string | null = null;
     let description: string | null = null;
@@ -1238,8 +1256,119 @@ export class EnumParser {
       }
     }
 
-
     return enums;
+  }
+
+  private parseConstArrayEnums(data: string): Record<string, any> {
+    const enums: Record<string, any> = {};
+    
+    // Match patterns like: export const PaymentStatuses = ['pending', 'processing'] as const
+    const constArrayPattern = /(?:export\s+)?const\s+(\w+)\s*=\s*\[(.*?)\]\s*as\s+const/gs;
+    let match;
+    
+    while ((match = constArrayPattern.exec(data)) !== null) {
+      const enumName = match[1];
+      const arrayContent = match[2];
+      
+      // Extract values from the array
+      const values = this.extractArrayValues(arrayContent);
+      
+      if (values.length > 0) {
+        enums[enumName] = {
+          type: "string",
+          enum: values,
+          properties: {},
+          description: `${startCase(enumName)} enumeration`,
+        };
+      }
+    }
+    
+    return enums;
+  }
+
+  private parseUnionTypeEnums(data: string): Record<string, any> {
+    const enums: Record<string, any> = {};
+    
+    // First, handle multiline union types by normalizing the data
+    const normalizedData = this.normalizeMultilineUnions(data);
+    
+    // Match patterns like: export const PaymentStatuses = 'pending' | 'active'
+    // or: export type PaymentStatus = 'pending' | 'active'
+    const unionTypePattern = /(?:export\s+)(?:const|type)\s+(\w+)\s*=\s*([^;\n}]+)/g;
+    let match;
+    
+    while ((match = unionTypePattern.exec(normalizedData)) !== null) {
+      const enumName = match[1];
+      const unionDefinition = match[2].trim();
+      
+      // Check if this looks like a union type with string literals
+      if (unionDefinition.includes('|')) {
+        const values = this.extractUnionValues(unionDefinition);
+        
+        if (values.length > 0) {
+          enums[enumName] = {
+            type: "string",
+            enum: values,
+            properties: {},
+            description: `${startCase(enumName)} enumeration`,
+          };
+        }
+      }
+    }
+    
+    return enums;
+  }
+
+  private normalizeMultilineUnions(data: string): string {
+    // Match multiline union type definitions
+    const multilineUnionPattern = /(?:export\s+)(?:const|type)\s+(\w+)\s*=\s*\|?([^;{}]+)/gs;
+    
+    return data.replace(multilineUnionPattern, (match, name, definition) => {
+      // If it contains pipe symbols, it's likely a union type
+      if (definition.includes('|')) {
+        // Remove line breaks and extra whitespace, but preserve the structure
+        const normalizedDefinition = definition
+          .replace(/\s*\|\s*/g, ' | ')  // Normalize pipe spacing
+          .replace(/\s+/g, ' ')         // Collapse multiple spaces
+          .trim();
+        
+        return `export type ${name} = ${normalizedDefinition}`;
+      }
+      return match;
+    });
+  }
+
+  private extractArrayValues(arrayContent: string): string[] {
+    const values: string[] = [];
+    
+    // Split by comma and clean up each value
+    const parts = arrayContent.split(',');
+    for (const part of parts) {
+      const cleaned = part.trim().replace(/^['"`]|['"`]$/g, '');
+      if (cleaned) {
+        values.push(cleaned);
+      }
+    }
+    
+    return values;
+  }
+
+  private extractUnionValues(unionDefinition: string): string[] {
+    const values: string[] = [];
+    
+    // Split by | and extract string literals
+    const parts = unionDefinition.split('|');
+    for (const part of parts) {
+      const trimmed = part.trim();
+      
+      // Check if it's a string literal (quoted)
+      const quotedMatch = trimmed.match(/^['"`]([^'"`]+)['"`]$/);
+      if (quotedMatch) {
+        values.push(quotedMatch[1]);
+      }
+    }
+    
+    return values;
   }
 
   private parseEnumValue(value: string): string {
