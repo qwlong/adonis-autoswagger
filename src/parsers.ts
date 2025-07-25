@@ -1200,13 +1200,60 @@ export class EnumParser {
     const traditionalEnums = this.parseTraditionalEnums(data);
     Object.assign(enums, traditionalEnums);
     
-    // Parse const array enums
+    // First pass: Parse const array enums (internal use only for type aliases)
     const constArrayEnums = this.parseConstArrayEnums(data);
-    Object.assign(enums, constArrayEnums);
     
-    // Parse union type enums
+    // Parse type aliases that reference const arrays (e.g., type Status = (typeof Statuses)[number])
+    // These have higher priority than union types with the same name
+    const typeAliasEnums = this.parseTypeAliasEnums(data, constArrayEnums);
+    Object.assign(enums, typeAliasEnums);
+    
+    // Only add const array enums that are NOT referenced by type aliases
+    const referencedConstArrays = new Set(Object.keys(typeAliasEnums).map(typeName => {
+      // Find the corresponding const array name by checking the data
+      const typeAliasPattern = new RegExp(`(?:export\\s+)?type\\s+${typeName}\\s*=\\s*\\(typeof\\s+(\\w+)\\)\\[number\\]`);
+      const match = data.match(typeAliasPattern);
+      return match ? match[1] : null;
+    }).filter(Boolean));
+    
+    for (const [constName, constEnum] of Object.entries(constArrayEnums)) {
+      if (!referencedConstArrays.has(constName)) {
+        enums[constName] = constEnum;
+      }
+    }
+    
+    // Parse union type enums, but skip if we already have a type alias with the same name
     const unionTypeEnums = this.parseUnionTypeEnums(data);
-    Object.assign(enums, unionTypeEnums);
+    for (const [unionName, unionEnum] of Object.entries(unionTypeEnums)) {
+      if (!enums[unionName]) {
+        enums[unionName] = unionEnum;
+      }
+    }
+    
+    return enums;
+  }
+
+  private parseTypeAliasEnums(data: string, constArrayEnums: Record<string, any>): Record<string, any> {
+    const enums: Record<string, any> = {};
+    
+    // Match patterns like: export type SubscriptionStatus = (typeof SubscriptionStatuses)[number]
+    const typeAliasPattern = /(?:export\s+)?type\s+(\w+)\s*=\s*\(typeof\s+(\w+)\)\[number\]/g;
+    let match;
+    
+    while ((match = typeAliasPattern.exec(data)) !== null) {
+      const typeName = match[1];        // e.g., "SubscriptionStatus"
+      const constArrayName = match[2];  // e.g., "SubscriptionStatuses"
+      
+      // If we found the corresponding const array, create the type alias
+      if (constArrayEnums[constArrayName]) {
+        enums[typeName] = {
+          type: "string",
+          enum: constArrayEnums[constArrayName].enum,
+          properties: {},
+          description: `${startCase(typeName)} enumeration`,
+        };
+      }
+    }
     
     return enums;
   }
