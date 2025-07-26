@@ -1249,7 +1249,6 @@ export class EnumParser {
         enums[typeName] = {
           type: "string",
           enum: constArrayEnums[constArrayName].enum,
-          properties: {},
           description: `${startCase(typeName)} enumeration`,
         };
       }
@@ -1282,7 +1281,6 @@ export class EnumParser {
           enums[currentEnum] = {
             type: "string",
             enum: [],
-            properties: {},
             description: description || `${startCase(currentEnum)} enumeration`,
           };
           description = null;
@@ -1324,7 +1322,6 @@ export class EnumParser {
         enums[enumName] = {
           type: "string",
           enum: values,
-          properties: {},
           description: `${startCase(enumName)} enumeration`,
         };
       }
@@ -1356,7 +1353,6 @@ export class EnumParser {
           enums[enumName] = {
             type: "string",
             enum: values,
-            properties: {},
             description: `${startCase(enumName)} enumeration`,
           };
         }
