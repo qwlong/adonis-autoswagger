@@ -363,6 +363,9 @@ export class AutoSwagger {
         });
       });
 
+      // Set current route for custom schema naming
+      this.commentParser.exampleGenerator.setCurrentRoute(route.pattern);
+      
       const { sourceFile, action, customAnnotations, operationId } =
         await this.getDataBasedOnAdonisVersion(route);
 

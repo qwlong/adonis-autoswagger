@@ -2,8 +2,14 @@ import { snakeCase } from "lodash";
 import { getBetweenBrackets } from "./helpers";
 export default class ExampleGenerator {
   public schemas = {};
+  private currentRoute: string = "";
+  
   constructor(schemas: any) {
     this.schemas = schemas;
+  }
+  
+  setCurrentRoute(route: string) {
+    this.currentRoute = route;
   }
 
   jsonToRef(json) {
@@ -122,19 +128,52 @@ export default class ExampleGenerator {
       items: { $ref: "#/components/schemas/" + cleanedRef },
     };
 
+    // Check if we need to use a custom schema name
+    let schemaRef = cleanedRef;
+    const hasFilters = inc || exc || only || serializer;
+    
+    if (hasFilters && this.currentRoute && !exampleOnly) {
+      // Extract the last segment of the route for naming
+      const routeSegments = this.currentRoute.split('/').filter(segment => segment && !segment.startsWith(':'));
+      const lastSegment = routeSegments[routeSegments.length - 1] || 'custom';
+      const capitalizedSegment = lastSegment.charAt(0).toUpperCase() + lastSegment.slice(1);
+      
+      // Create custom schema name
+      schemaRef = `${capitalizedSegment}${cleanedRef}`;
+    }
+
     if (rawRef.includes("[]")) {
       if (exampleOnly) {
         return paginated === "true" ? paginatedEx : [ex];
       }
+      
+      const arrayItemRef = hasFilters && this.currentRoute ? schemaRef : cleanedRef;
+      const paginatedSchemaWithCustom = {
+        type: "object",
+        properties: {
+          [dataName]: {
+            type: "array",
+            items: { $ref: "#/components/schemas/" + arrayItemRef },
+          },
+          [metaName]: { $ref: "#/components/schemas/PaginationMeta" },
+        },
+      };
+      
+      const normalArraySchemaWithCustom = {
+        type: "array",
+        items: { $ref: "#/components/schemas/" + arrayItemRef },
+      };
+      
       return {
         content: {
           "application/json": {
-            schema: paginated === "true" ? paginatedSchema : normalArraySchema,
+            schema: paginated === "true" ? paginatedSchemaWithCustom : normalArraySchemaWithCustom,
             example: paginated === "true" ? paginatedEx : [ex],
           },
         },
       };
     }
+    
     if (exampleOnly) {
       return ex;
     }
@@ -143,7 +182,7 @@ export default class ExampleGenerator {
       content: {
         "application/json": {
           schema: {
-            $ref: "#/components/schemas/" + rawRef,
+            $ref: "#/components/schemas/" + schemaRef,
           },
           example: ex,
         },
@@ -384,6 +423,7 @@ export default class ExampleGenerator {
 
     return { dataName, metaName };
   }
+
 }
 
 export abstract class ExampleInterfaces {

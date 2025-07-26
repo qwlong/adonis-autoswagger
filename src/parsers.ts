@@ -403,8 +403,8 @@ export class CommentParser {
               if (_.has(value, "content.application/json.schema.items.$ref")) {
                 ref =
                   value["content"]["application/json"]["schema"]["items"][
-                  "$ref"
-                  ];
+                    "$ref"
+                    ];
               }
               value = {
                 type: "array",
@@ -1195,19 +1195,19 @@ export class EnumParser {
 
   parseEnums(data: string): Record<string, any> {
     const enums: Record<string, any> = {};
-    
+
     // Parse traditional enum declarations
     const traditionalEnums = this.parseTraditionalEnums(data);
     Object.assign(enums, traditionalEnums);
-    
+
     // First pass: Parse const array enums (internal use only for type aliases)
     const constArrayEnums = this.parseConstArrayEnums(data);
-    
+
     // Parse type aliases that reference const arrays (e.g., type Status = (typeof Statuses)[number])
     // These have higher priority than union types with the same name
     const typeAliasEnums = this.parseTypeAliasEnums(data, constArrayEnums);
     Object.assign(enums, typeAliasEnums);
-    
+
     // Only add const array enums that are NOT referenced by type aliases
     const referencedConstArrays = new Set(Object.keys(typeAliasEnums).map(typeName => {
       // Find the corresponding const array name by checking the data
@@ -1215,13 +1215,13 @@ export class EnumParser {
       const match = data.match(typeAliasPattern);
       return match ? match[1] : null;
     }).filter(Boolean));
-    
+
     for (const [constName, constEnum] of Object.entries(constArrayEnums)) {
       if (!referencedConstArrays.has(constName)) {
         enums[constName] = constEnum;
       }
     }
-    
+
     // Parse union type enums, but skip if we already have a type alias with the same name
     const unionTypeEnums = this.parseUnionTypeEnums(data);
     for (const [unionName, unionEnum] of Object.entries(unionTypeEnums)) {
@@ -1229,21 +1229,21 @@ export class EnumParser {
         enums[unionName] = unionEnum;
       }
     }
-    
+
     return enums;
   }
 
   private parseTypeAliasEnums(data: string, constArrayEnums: Record<string, any>): Record<string, any> {
     const enums: Record<string, any> = {};
-    
+
     // Match patterns like: export type SubscriptionStatus = (typeof SubscriptionStatuses)[number]
     const typeAliasPattern = /(?:export\s+)?type\s+(\w+)\s*=\s*\(typeof\s+(\w+)\)\[number\]/g;
     let match;
-    
+
     while ((match = typeAliasPattern.exec(data)) !== null) {
       const typeName = match[1];        // e.g., "SubscriptionStatus"
       const constArrayName = match[2];  // e.g., "SubscriptionStatuses"
-      
+
       // If we found the corresponding const array, create the type alias
       if (constArrayEnums[constArrayName]) {
         enums[typeName] = {
@@ -1253,7 +1253,7 @@ export class EnumParser {
         };
       }
     }
-    
+
     return enums;
   }
 
@@ -1306,18 +1306,18 @@ export class EnumParser {
 
   private parseConstArrayEnums(data: string): Record<string, any> {
     const enums: Record<string, any> = {};
-    
+
     // Match patterns like: export const PaymentStatuses = ['pending', 'processing'] as const
     const constArrayPattern = /(?:export\s+)?const\s+(\w+)\s*=\s*\[(.*?)\]\s*as\s+const/gs;
     let match;
-    
+
     while ((match = constArrayPattern.exec(data)) !== null) {
       const enumName = match[1];
       const arrayContent = match[2];
-      
+
       // Extract values from the array
       const values = this.extractArrayValues(arrayContent);
-      
+
       if (values.length > 0) {
         enums[enumName] = {
           type: "string",
@@ -1326,29 +1326,29 @@ export class EnumParser {
         };
       }
     }
-    
+
     return enums;
   }
 
   private parseUnionTypeEnums(data: string): Record<string, any> {
     const enums: Record<string, any> = {};
-    
+
     // First, handle multiline union types by normalizing the data
     const normalizedData = this.normalizeMultilineUnions(data);
-    
+
     // Match patterns like: export const PaymentStatuses = 'pending' | 'active'
     // or: export type PaymentStatus = 'pending' | 'active'
     const unionTypePattern = /(?:export\s+)(?:const|type)\s+(\w+)\s*=\s*([^;\n}]+)/g;
     let match;
-    
+
     while ((match = unionTypePattern.exec(normalizedData)) !== null) {
       const enumName = match[1];
       const unionDefinition = match[2].trim();
-      
+
       // Check if this looks like a union type with string literals
       if (unionDefinition.includes('|')) {
         const values = this.extractUnionValues(unionDefinition);
-        
+
         if (values.length > 0) {
           enums[enumName] = {
             type: "string",
@@ -1358,14 +1358,14 @@ export class EnumParser {
         }
       }
     }
-    
+
     return enums;
   }
 
   private normalizeMultilineUnions(data: string): string {
     // Match multiline union type definitions
     const multilineUnionPattern = /(?:export\s+)(?:const|type)\s+(\w+)\s*=\s*\|?([^;{}]+)/gs;
-    
+
     return data.replace(multilineUnionPattern, (match, name, definition) => {
       // If it contains pipe symbols, it's likely a union type
       if (definition.includes('|')) {
@@ -1374,7 +1374,7 @@ export class EnumParser {
           .replace(/\s*\|\s*/g, ' | ')  // Normalize pipe spacing
           .replace(/\s+/g, ' ')         // Collapse multiple spaces
           .trim();
-        
+
         return `export type ${name} = ${normalizedDefinition}`;
       }
       return match;
@@ -1383,7 +1383,7 @@ export class EnumParser {
 
   private extractArrayValues(arrayContent: string): string[] {
     const values: string[] = [];
-    
+
     // Split by comma and clean up each value
     const parts = arrayContent.split(',');
     for (const part of parts) {
@@ -1392,25 +1392,25 @@ export class EnumParser {
         values.push(cleaned);
       }
     }
-    
+
     return values;
   }
 
   private extractUnionValues(unionDefinition: string): string[] {
     const values: string[] = [];
-    
+
     // Split by | and extract string literals
     const parts = unionDefinition.split('|');
     for (const part of parts) {
       const trimmed = part.trim();
-      
+
       // Check if it's a string literal (quoted)
       const quotedMatch = trimmed.match(/^['"`]([^'"`]+)['"`]$/);
       if (quotedMatch) {
         values.push(quotedMatch[1]);
       }
     }
-    
+
     return values;
   }
 
