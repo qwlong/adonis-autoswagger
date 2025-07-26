@@ -513,6 +513,13 @@ export class AutoSwagger {
         .flat()
     );
 
+    // Add custom schemas to the schemas object
+    const customSchemas = this.commentParser.exampleGenerator.getCustomSchemas();
+    docs.components.schemas = {
+      ...docs.components.schemas,
+      ...customSchemas
+    };
+    
     docs.tags = globalTags.filter((tag) => usedTags.includes(tag.name));
     docs.paths = paths;
     return docs;

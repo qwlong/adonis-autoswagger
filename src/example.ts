@@ -11,6 +11,12 @@ export default class ExampleGenerator {
   setCurrentRoute(route: string) {
     this.currentRoute = route;
   }
+  
+  getCustomSchemas() {
+    return this.customSchemas || {};
+  }
+  
+  private customSchemas = {};
 
   jsonToRef(json) {
     const jsonObjectIsArray = Array.isArray(json);
@@ -54,10 +60,48 @@ export default class ExampleGenerator {
 
     let inc = getBetweenBrackets(line, "with");
     let exc = getBetweenBrackets(line, "exclude");
-    const append = getBetweenBrackets(line, "append");
+    let append = getBetweenBrackets(line, "append");
     let only = getBetweenBrackets(line, "only");
     const paginated = getBetweenBrackets(line, "paginated");
     const serializer = getBetweenBrackets(line, "serialized");
+
+    // Support method syntax like .only(field1, field2)
+    if (!only) {
+      const onlyMatch = line.match(/\.only\(([^)]+)\)/);
+      if (onlyMatch) {
+        only = onlyMatch[1].replace(/\s/g, '').replace(/"/g, '').replace(/'/g, '');
+      }
+    }
+    
+    if (!exc) {
+      const excludeMatch = line.match(/\.exclude\(([^)]+)\)/);
+      if (excludeMatch) {
+        exc = excludeMatch[1].replace(/\s/g, '').replace(/"/g, '').replace(/'/g, '');
+      }
+    }
+    
+    if (!inc) {
+      const withMatch = line.match(/\.with\(([^)]+)\)/);
+      if (withMatch) {
+        inc = withMatch[1].replace(/\s/g, '').replace(/"/g, '').replace(/'/g, '');
+      }
+    }
+    
+    if (!append) {
+      const appendMatch = line.match(/\.append\(([^)]+)\)/);
+      if (appendMatch) {
+        // For append, we need to keep the JSON format
+        let appendContent = appendMatch[1];
+        try {
+          // Try to parse as valid JSON object content
+          JSON.parse('{' + appendContent + '}');
+          append = appendContent;
+        } catch {
+          // If not valid JSON, treat as simple key-value
+          append = appendContent;
+        }
+      }
+    }
 
     if (serializer) {
       // we override to be sure
@@ -90,7 +134,9 @@ export default class ExampleGenerator {
 
     let app = {};
     try {
-      app = JSON.parse("{" + append + "}");
+      if (append) {
+        app = JSON.parse("{" + append + "}");
+      }
     } catch {}
 
     const cleanedRef = rawRef.replace("[]", "");
@@ -130,7 +176,7 @@ export default class ExampleGenerator {
 
     // Check if we need to use a custom schema name
     let schemaRef = cleanedRef;
-    const hasFilters = inc || exc || only || serializer;
+    const hasFilters = inc || exc || only || serializer || append;
     
     if (hasFilters && this.currentRoute && !exampleOnly) {
       // Extract the last segment of the route for naming
@@ -140,6 +186,14 @@ export default class ExampleGenerator {
       
       // Create custom schema name
       schemaRef = `${capitalizedSegment}${cleanedRef}`;
+      
+      // Generate custom schema based on the original schema and filters
+      if (this.schemas[cleanedRef]) {
+        const customSchema = this.generateCustomSchema(cleanedRef, inc, exc, only, app);
+        if (customSchema) {
+          this.customSchemas[schemaRef] = customSchema;
+        }
+      }
     }
 
     if (rawRef.includes("[]")) {
@@ -422,6 +476,82 @@ export default class ExampleGenerator {
     const metaName = params[1] || "meta";
 
     return { dataName, metaName };
+  }
+
+  generateCustomSchema(baseSchema: string, inc: string, exc: string, only: string, appendObj: any = {}) {
+    if (!this.schemas[baseSchema]) {
+      return null;
+    }
+
+    const originalSchema = this.schemas[baseSchema];
+    const customSchema = {
+      type: originalSchema.type || "object",
+      description: `Custom schema for ${baseSchema}`,
+      properties: {},
+      required: []
+    };
+
+    const include = inc.toString().split(",").filter(Boolean);
+    const exclude = exc.toString().split(",").filter(Boolean);
+    const onlyFields = only.toString().split(",").filter(Boolean);
+
+    // Start with original properties
+    if (originalSchema.properties) {
+      // If only is specified, use only those fields
+      if (onlyFields.length > 0) {
+        for (const field of onlyFields) {
+          if (originalSchema.properties[field]) {
+            customSchema.properties[field] = originalSchema.properties[field];
+            if (originalSchema.required && originalSchema.required.includes(field)) {
+              customSchema.required.push(field);
+            }
+          }
+        }
+      } else {
+        // Otherwise, include all fields except excluded ones
+        for (const [key, value] of Object.entries(originalSchema.properties)) {
+          // Skip excluded fields
+          if (exclude.includes(key)) continue;
+          
+          // Skip passwords unless explicitly included
+          if (key === "password" && !include.includes("password")) continue;
+          if (key === "password_confirmation" && !include.includes("password_confirmation")) continue;
+          
+          // Skip timestamps if excluded
+          if ((key === "created_at" || key === "updated_at" || key === "deleted_at") && exclude.includes("timestamps")) continue;
+          
+          // Check if it's a relation that should be included
+          const isRelation = value["$ref"] || (value["items"] && value["items"]["$ref"]);
+          if (isRelation && !include.includes("relations") && !include.includes(key)) continue;
+          
+          customSchema.properties[key] = value;
+          if (originalSchema.required && originalSchema.required.includes(key)) {
+            customSchema.required.push(key);
+          }
+        }
+      }
+    }
+
+    // Add appended properties
+    for (const [key, value] of Object.entries(appendObj)) {
+      if (typeof value === "string") {
+        // Simple type like "string"
+        customSchema.properties[key] = {
+          type: value,
+          example: this.exampleByField(key) || `example ${value}`
+        };
+      } else {
+        // Complex object
+        customSchema.properties[key] = value;
+      }
+    }
+
+    // If no properties were added, return null
+    if (Object.keys(customSchema.properties).length === 0) {
+      return null;
+    }
+
+    return customSchema;
   }
 
 }
