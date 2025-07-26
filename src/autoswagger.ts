@@ -380,6 +380,9 @@ export class AutoSwagger {
         )
           return;
 
+        // Set current method for custom schema naming
+        this.commentParser.exampleGenerator.setCurrentMethod(method);
+
         let description = "";
         let summary = "";
         let tag = "";

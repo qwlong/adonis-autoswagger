@@ -3,6 +3,7 @@ import { getBetweenBrackets } from "./helpers";
 export default class ExampleGenerator {
   public schemas = {};
   private currentRoute: string = "";
+  private currentMethod: string = "";
   
   constructor(schemas: any) {
     this.schemas = schemas;
@@ -10,6 +11,10 @@ export default class ExampleGenerator {
   
   setCurrentRoute(route: string) {
     this.currentRoute = route;
+  }
+  
+  setCurrentMethod(method: string) {
+    this.currentMethod = method.charAt(0).toUpperCase() + method.toLowerCase().slice(1);
   }
   
   getCustomSchemas() {
@@ -179,13 +184,18 @@ export default class ExampleGenerator {
     const hasFilters = inc || exc || only || serializer || append;
     
     if (hasFilters && this.currentRoute && !exampleOnly) {
-      // Extract the last segment of the route for naming
+      // Extract all meaningful segments from the route for naming
       const routeSegments = this.currentRoute.split('/').filter(segment => segment && !segment.startsWith(':'));
-      const lastSegment = routeSegments[routeSegments.length - 1] || 'custom';
-      const capitalizedSegment = lastSegment.charAt(0).toUpperCase() + lastSegment.slice(1);
       
-      // Create custom schema name
-      schemaRef = `${capitalizedSegment}${cleanedRef}`;
+      // Convert segments to PascalCase and join them
+      const routeNameParts = routeSegments.map(segment => 
+        segment.charAt(0).toUpperCase() + segment.toLowerCase().slice(1)
+      );
+      const routeName = routeNameParts.join('');
+      
+      // Create custom schema name with HTTP method prefix
+      const methodPrefix = this.currentMethod || 'Unknown';
+      schemaRef = `${methodPrefix}${routeName}${cleanedRef}`;
       
       // Generate custom schema based on the original schema and filters
       if (this.schemas[cleanedRef]) {
